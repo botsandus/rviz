@@ -380,9 +380,9 @@ void CameraDisplay::createCameraInfoSubscription()
 
 void CameraDisplay::unsubscribe()
 {
-  ITDClass::unsubscribe();
   caminfo_sub_.reset();
   tf_filter_.reset();
+  ITDClass::unsubscribe();
 }
 
 void CameraDisplay::updateAlpha()
