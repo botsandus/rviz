@@ -31,10 +31,68 @@
 #include "display_test_fixture.hpp"
 
 #include <memory>
+#include <sstream>
+#include <string>
 
+#include <OgreMaterialManager.h>
 #include <OgreSceneNode.h>
+#include <OgreTextureManager.h>
 
 #include "rclcpp/clock.hpp"
+
+namespace
+{
+
+// Ogre keeps one collection per movable object type and hands out an empty one for a
+// type that was never used, so naming types rviz does not create costs nothing.
+const char * const movable_object_types[] = {
+  "Entity", "ManualObject", "BillboardSet", "BillboardChain", "RibbonTrail",
+  "Light", "ParticleSystem", "MovableText", "PointCloud", "SimpleRenderable"};
+
+size_t countResources(Ogre::ResourceManager & resource_manager)
+{
+  size_t count = 0;
+  auto resources = resource_manager.getResourceIterator();
+  while (resources.hasMoreElements()) {
+    resources.moveNext();
+    count++;
+  }
+  return count;
+}
+
+void reportGrowth(
+  std::ostringstream & growth, const std::string & category, size_t before, size_t after)
+{
+  if (after > before) {
+    growth << " " << category << " " << before << "->" << after;
+  }
+}
+
+}  // namespace
+
+OgreResourceLedger OgreResourceLedger::capture(Ogre::SceneManager * scene_manager)
+{
+  OgreResourceLedger ledger;
+  for (const auto & type : movable_object_types) {
+    ledger.movable_objects[type] = scene_manager->getMovableObjects(type).size();
+  }
+  ledger.cameras = scene_manager->getCameras().size();
+  ledger.materials = countResources(Ogre::MaterialManager::getSingleton());
+  ledger.textures = countResources(Ogre::TextureManager::getSingleton());
+  return ledger;
+}
+
+std::string OgreResourceLedger::growthSince(const OgreResourceLedger & baseline) const
+{
+  std::ostringstream growth;
+  for (const auto & entry : movable_objects) {
+    reportGrowth(growth, entry.first, baseline.movable_objects.at(entry.first), entry.second);
+  }
+  reportGrowth(growth, "Camera", baseline.cameras, cameras);
+  reportGrowth(growth, "Material", baseline.materials, materials);
+  reportGrowth(growth, "Texture", baseline.textures, textures);
+  return growth.str();
+}
 
 void DisplayTestFixture::SetUpTestCase()
 {
@@ -62,10 +120,16 @@ DisplayTestFixture::DisplayTestFixture()
     testing::Return(selection_manager_));
   EXPECT_CALL(*context_, getHandlerManager()).WillRepeatedly(
     testing::Return(handler_manager_));
+
+  ledger_at_start_ = OgreResourceLedger::capture(scene_manager_);
 }
 
 DisplayTestFixture::~DisplayTestFixture()
 {
+  // Checked before the sweep below, which would otherwise destroy the evidence.
+  auto growth = OgreResourceLedger::capture(scene_manager_).growthSince(ledger_at_start_);
+  EXPECT_TRUE(growth.empty()) << "Ogre resources this test never gave back:" << growth;
+
   scene_manager_->getRootSceneNode()->removeAndDestroyAllChildren();
 }
 

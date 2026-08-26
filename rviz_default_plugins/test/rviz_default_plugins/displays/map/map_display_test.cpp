@@ -36,6 +36,8 @@
 #include <vector>
 
 #include <OgreManualObject.h>
+#include <OgreMaterialManager.h>
+#include <OgreTextureManager.h>
 
 #include "rviz_default_plugins/displays/map/map_display.hpp"
 #include "../../scene_graph_introspection.hpp"
@@ -102,6 +104,30 @@ public:
       scene_manager_->getRootSceneNode(), "ManualObject");
 
     EXPECT_THAT(manual_objects, IsEmpty());
+  }
+
+  size_t countResourcesWithPrefix(
+    Ogre::ResourceManager & resource_manager, const std::string & prefix)
+  {
+    size_t count = 0;
+    auto resources = resource_manager.getResourceIterator();
+    while (resources.hasMoreElements()) {
+      if (resources.peekNextValue()->getName().rfind(prefix, 0) == 0) {
+        count++;
+      }
+      resources.moveNext();
+    }
+    return count;
+  }
+
+  size_t countSwatchMaterials()
+  {
+    return countResourcesWithPrefix(Ogre::MaterialManager::getSingleton(), "MapMaterial");
+  }
+
+  size_t countSwatchTextures()
+  {
+    return countResourcesWithPrefix(Ogre::TextureManager::getSingleton(), "MapTexture");
   }
 
   std::shared_ptr<rviz_default_plugins::displays::MapDisplay> map_display_;
@@ -211,4 +237,23 @@ TEST_F(MapTestFixture, createSwatches_creates_more_swatches_if_map_is_too_big) {
     scene_manager_->getRootSceneNode(), "ManualObject");
 
   EXPECT_THAT(manual_objects, SizeIs(8));
+}
+
+TEST_F(MapTestFixture, resizing_the_map_does_not_accumulate_swatch_materials_or_textures) {
+  mockValidTransform();
+
+  map_display_->processMessage(createMapMessage(50, 50));
+
+  // Counted after the first map so the baseline is unaffected by earlier tests in this
+  // binary, which share the scene manager and Ogre's resource managers.
+  auto materials = countSwatchMaterials();
+  auto textures = countSwatchTextures();
+
+  // each resize destroys the old swatch and builds a new one
+  for (uint32_t size = 51; size <= 60; size++) {
+    map_display_->processMessage(createMapMessage(size, size));
+  }
+
+  EXPECT_THAT(countSwatchMaterials(), Eq(materials));
+  EXPECT_THAT(countSwatchTextures(), Eq(textures));
 }

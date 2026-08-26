@@ -36,6 +36,7 @@
 
 #include <OgreColourValue.h>
 #include <OgreRoot.h>
+#include <OgreSceneManager.h>
 #include <OgreSceneNode.h>
 #include <OgreVector.h>
 
@@ -85,4 +86,20 @@ TEST_F(TrianglePolygonTestFixture, trianglePolygon_constructor_nullptr_parameter
     auto triangle = rviz_rendering::TrianglePolygon(nullptr, nullptr, Ogre::Vector3(),
     Ogre::Vector3(), Ogre::Vector3(), "", Ogre::ColourValue(), false, false),
     std::invalid_argument);
+}
+
+TEST_F(TrianglePolygonTestFixture, destroying_polygons_does_not_accumulate_manual_objects)
+{
+  auto scene_manager = Ogre::Root::getSingletonPtr()->createSceneManager();
+  auto root_node = scene_manager->getRootSceneNode();
+
+  auto manual_objects = scene_manager->getMovableObjects("ManualObject").size();
+
+  for (int i = 0; i < 10; i++) {
+    auto triangle_polygon = std::make_unique<rviz_rendering::TrianglePolygon>(
+      scene_manager, root_node, Ogre::Vector3(0, 0, 0), Ogre::Vector3(0, 1, 0),
+      Ogre::Vector3(1, 0, 0), "test_triangle", Ogre::ColourValue(1, 0, 0, 1), false, false);
+  }
+
+  EXPECT_EQ(scene_manager->getMovableObjects("ManualObject").size(), manual_objects);
 }

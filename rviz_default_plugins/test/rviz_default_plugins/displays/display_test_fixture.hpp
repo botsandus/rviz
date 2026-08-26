@@ -33,12 +33,14 @@
 
 #include <gmock/gmock.h>
 
+#include <map>
 #include <memory>
 #include <string>
 
 #include <QApplication>  // NOLINT
 
 #include <OgreRoot.h>
+#include <OgreSceneManager.h>
 
 #include "rclcpp/clock.hpp"
 
@@ -52,6 +54,26 @@
 #include "rviz_common/ros_integration/ros_node_abstraction_iface.hpp"
 #include "rviz_common/ros_integration/ros_client_abstraction_iface.hpp"
 #include "rviz_common/ros_integration/ros_client_abstraction.hpp"
+
+/// Counts of the Ogre resources a display is expected to hand back when it dies.
+/**
+ * Ogre owns these by name, so dropping the last pointer to one does not release it:
+ * the resource stays registered until it is explicitly destroyed or removed. That
+ * makes a growing count the signature of a leak rather than of ordinary churn.
+ */
+struct OgreResourceLedger
+{
+  std::map<std::string, size_t> movable_objects;
+  size_t cameras{0};
+  size_t materials{0};
+  size_t textures{0};
+
+  /// Snapshot everything currently registered with Ogre.
+  static OgreResourceLedger capture(Ogre::SceneManager * scene_manager);
+
+  /// Describe every category that grew since baseline. Empty when nothing did.
+  std::string growthSince(const OgreResourceLedger & baseline) const;
+};
 
 class DisplayTestFixture : public testing::Test
 {
@@ -78,6 +100,9 @@ public:
   std::shared_ptr<rclcpp::Clock> clock_;
 
   std::string fixed_frame{"fixed_frame"};
+
+  /// Resource counts taken before the test ran, checked again when it ends.
+  OgreResourceLedger ledger_at_start_;
 };
 
 
