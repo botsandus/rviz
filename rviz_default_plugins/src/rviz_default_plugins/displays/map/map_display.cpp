@@ -224,6 +224,9 @@ void MapDisplay::updateBinaryThreshold()
 
 void MapDisplay::updateTopic()
 {
+  if (topic_load_in_progress_) {
+    return;
+  }
   update_topic_property_->setValue(topic_property_->getTopic() + "_updates");
   MFDClass::updateTopic();
 }
@@ -717,6 +720,9 @@ void MapDisplay::onEnable()
 
 void MapDisplay::updateMapUpdateTopic()
 {
+  if (topic_load_in_progress_) {
+    return;
+  }
   unsubscribeToUpdateTopic();
   reset();
   subscribeToUpdateTopic();

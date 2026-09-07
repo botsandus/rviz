@@ -116,6 +116,26 @@ public:
       Qt::QueuedConnection);
   }
 
+  /// Load the display's saved configuration.
+  /**
+   * Overridden to coalesce topic (re)subscription during config load.
+   * Each topic and QoS sub-property fires updateTopic() as it is loaded, which
+   * unsubscribes and resubscribes; loading a display therefore produces a burst
+   * of short-lived subscriptions. Under rmw_zenoh a TRANSIENT_LOCAL publisher's
+   * historical (latched) sample can be dropped when the querying subscription is
+   * torn down before the query reply arrives (rmw_zenoh #978), so the display can
+   * come up without ever receiving the latched message. Suppress the per-property
+   * resubscription while loading and (re)subscribe exactly once, with the final
+   * topic and QoS, when loading is complete.
+   */
+  void load(const Config & config) override
+  {
+    topic_load_in_progress_ = true;
+    Display::load(config);
+    topic_load_in_progress_ = false;
+    updateTopic();
+  }
+
 Q_SIGNALS:
   void typeErasedMessageTaken(std::shared_ptr<const void> type_erased_message);
 
@@ -141,6 +161,8 @@ protected:
   rclcpp::QoS qos_profile;
   properties::RosTopicProperty * topic_property_;
   properties::QosProfileProperty * qos_profile_property_;
+  /// True while load() is applying a saved config; suppresses per-property resubscription.
+  bool topic_load_in_progress_ = false;
 };
 
 /** @brief Display subclass using a rclcpp::subscription, templated on the ROS message type.
@@ -185,6 +207,9 @@ public:
 protected:
   void updateTopic() override
   {
+    if (topic_load_in_progress_) {
+      return;
+    }
     unsubscribe();
     reset();
     subscribe();

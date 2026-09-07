@@ -107,6 +107,9 @@ public:
 protected:
   void updateTopic() override
   {
+    if (topic_load_in_progress_) {
+      return;
+    }
     resetSubscription();
   }
 
